@@ -1,25 +1,41 @@
-import { CalculateMetadataFunction, Composition } from "remotion";
+import React from "react";
+import { Sequence } from "remotion";
+import { AuroraBackground } from "./components/AuroraBackground";
+import { SCENES, VIDEO } from "./constants";
+import { Scene1Test } from "./scenes";
 
-type Props = {};
-
-const calculateMetadata: CalculateMetadataFunction<Props> = () => {
-  return {};
-};
-
-export const MyComposition = () => {
+/**
+ * Main composition: one "Main" beat that spans the whole video.
+ * Scene1Test carries every beat over one shared aurora backdrop.
+ *
+ * Project uses layout="none" so Remotion does not inject an AbsoluteFill
+ * under it — keeps the Studio timeline labeled only with Sequence names.
+ */
+export const PortfolioVideo: React.FC = () => {
   return (
-    <Composition
-      id="MyComp"
-      component={MyComponent}
-      durationInFrames={60}
-      fps={30}
-      width={1280}
-      height={720}
-      calculateMetadata={calculateMetadata}
-    />
+    <Sequence
+      durationInFrames={VIDEO.durationInFrames}
+      name="Project"
+      layout="none"
+    >
+      <Sequence
+        from={SCENES.intro.from}
+        durationInFrames={SCENES.intro.durationInFrames}
+        name="Main"
+      >
+        <Sequence
+          durationInFrames={SCENES.intro.durationInFrames}
+          name="Background"
+        >
+          <AuroraBackground driftFrames={SCENES.intro.durationInFrames} />
+        </Sequence>
+        <Sequence
+          durationInFrames={SCENES.intro.durationInFrames}
+          name="Scene"
+        >
+          <Scene1Test />
+        </Sequence>
+      </Sequence>
+    </Sequence>
   );
-};
-
-export const MyComponent: React.FC<Props> = () => {
-  return null;
 };

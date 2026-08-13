@@ -1,1 +1,31 @@
 @import "tailwindcss";
+
+/*
+  Remotion-friendly utilities:
+  - Prefer transform/opacity (GPU-friendly)
+  - Limit backdrop-blur usage (expensive when many layers)
+  - Code/prompt blocks must wrap, never clip
+*/
+
+@utility text-break-safe {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: pre-wrap;
+  hyphens: none;
+}
+
+@utility glass-panel {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+}

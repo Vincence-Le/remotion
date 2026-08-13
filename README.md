@@ -1,54 +1,45 @@
-# Remotion video
+# Portfolio Motion Graphic (Remotion)
 
-<p align="center">
-  <a href="https://github.com/remotion-dev/logo">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://github.com/remotion-dev/logo/raw/main/animated-logo-banner-dark.apng">
-      <img alt="Animated Remotion Logo" src="https://github.com/remotion-dev/logo/raw/main/animated-logo-banner-light.gif">
-    </picture>
-  </a>
-</p>
+60-second motion reel for web portfolio embeds — **1920×1080 · 30fps · 1800 frames**.
 
-Welcome to your Remotion project!
+## Stack
 
-## Commands
+- Remotion 4 + TypeScript
+- Tailwind CSS v4 via `@remotion/tailwind-v4`
+- Native Remotion `spring` / `interpolate` only (no CSS-in-JS, no WebGL)
 
-**Install Dependencies**
+## Scripts
 
-```console
-npm i
+```bash
+npm run dev      # Remotion Studio
+npm run build    # Bundle site
+npm run lint     # ESLint + tsc
+npx remotion render PortfolioMotion out/portfolio.mp4
 ```
 
-**Start Preview**
+## Structure
 
-```console
-npm run dev
+```
+public/
+  audio/          # background-music.mp3, sfx/*
+  logos/          # logo.svg, mark.svg
+src/
+  components/     # Glass, Floating, Code/Prompt, MatchCut
+  scenes/         # Short cuts stitched in Composition
+  Composition.tsx # Sequence timeline
+  Root.tsx        # Composition registration
+  constants.ts    # Video + scene timing
 ```
 
-**Render video**
+## Scene timeline
 
-```console
-npx remotion render
-```
+| Scene        | Frames   | Seconds |
+|--------------|----------|---------|
+| Intro        | 0–150    | 0–5s    |
+| Floating UI  | 150–450  | 5–15s   |
+| Code / Prompt| 450–750  | 15–25s  |
+| Match Cut    | 750–1050 | 25–35s  |
+| Features     | 1050–1500| 35–50s  |
+| Outro        | 1500–1800| 50–60s  |
 
-**Upgrade Remotion**
-
-```console
-npx remotion upgrade
-```
-
-## Docs
-
-Get started with Remotion by reading the [fundamentals page](https://www.remotion.dev/docs/the-fundamentals).
-
-## Help
-
-We provide help on our [Discord server](https://discord.gg/6VzzNDwUwV).
-
-## Issues
-
-Found an issue with Remotion? [File an issue here](https://github.com/remotion-dev/remotion/issues/new).
-
-## License
-
-Note that for some entities a company license is needed. [Read the terms here](https://github.com/remotion-dev/remotion/blob/main/LICENSE.md).
+Drop audio files into `public/audio/` and uncomment the `<Audio>` block in `src/Composition.tsx`.
