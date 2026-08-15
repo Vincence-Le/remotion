@@ -5,6 +5,7 @@ import {
   Easing,
   Img,
   interpolate,
+  Sequence,
   spring,
   staticFile,
   useCurrentFrame,
@@ -17,7 +18,54 @@ import {
   INTRODUCE_PHASE2_EARLY,
   INTRODUCE_SPLIT_FRAMES,
   INTRODUCE_TRAVEL_FRAMES,
+  VIDEO,
 } from "../constants";
+import {
+  DRIVE_START,
+  DRIVE_MORPH_START,
+  DRIVE_MORPH_DURATION,
+  DRIVE_NODE_POP_START,
+  DRIVE_NODE_SIZE,
+  DRIVE_NODE_X_RATIO,
+  DriveIntegrationScene,
+} from "../drive_scene/DriveIntegrationScene";
+import {
+  TELEGRAM_SLIDE_START,
+  TELEGRAM_SLIDE_DURATION,
+  TG_ARROW_START,
+  TG_NODE_POP_START,
+  TG_FADE_START,
+  TG_FADE_DURATION,
+  TelegramOutboundArrow,
+  TelegramNode,
+  TelegramLogoFlight,
+  IPhoneTelegramReveal,
+  TelegramCameraRig,
+  TelegramTickConfirm,
+  TelegramEndExit,
+} from "../telegram_scene/TelegramPhoneReveal";
+
+/**
+ * Mounts children only while `from … from+duration` is active, but keeps
+ * `useCurrentFrame()` on the composition clock (absolute). Remotion's
+ * Sequence normally resets the clock to 0 — the nested negative offset
+ * undoes that so existing absolute-frame math stays valid.
+ */
+const AbsoluteSequence: React.FC<{
+  from: number;
+  durationInFrames: number;
+  children: React.ReactNode;
+}> = ({ from, durationInFrames, children }) => (
+  <Sequence from={from} durationInFrames={durationInFrames} layout="none">
+    <Sequence
+      from={0 - from}
+      durationInFrames={from + durationInFrames}
+      layout="none"
+    >
+      {children}
+    </Sequence>
+  </Sequence>
+);
 
 const FULL_TEXT = "How I automate my social presence";
 /** Typewriter starts after the glass card has mostly sprung in. */
@@ -4904,9 +4952,15 @@ const GeminiImageReveal: React.FC = () => {
 
   const scale = popScale * centerScale * thinkBounce;
   const rotation = entryRotation + thinkSpin;
+  // Recedes as the Drive light front floods past it.
+  const driveExit = interpolate(absFrame, [DRIVE_START - 4, DRIVE_START + 9], [1, 0], {
+    easing: Easing.in(Easing.quad),
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
 
   return (
-    <AbsoluteFill>
+    <AbsoluteFill style={{ opacity: driveExit }}>
       <div
         style={{
           position: "absolute",
@@ -5016,6 +5070,16 @@ const GeneratedSampleFrame: React.FC = () => {
     return null;
   }
 
+  // The generate-border peels off first; the still itself hands over to
+  // DriveIntegrationScene on one frame at identical geometry (match cut).
+  const outlineHandoff = interpolate(
+    absFrame,
+    [DRIVE_START - 26, DRIVE_START - 8],
+    [1, 0],
+    { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
+  );
+  const stillHandoff = absFrame >= DRIVE_START ? 0 : 1;
+
   const { sampleCX: cx, sampleSize: size } = geminiSampleLayout(width, height);
   const cy = height / 2;
   const tile = size / SAMPLE_GRID;
@@ -5113,7 +5177,7 @@ const GeneratedSampleFrame: React.FC = () => {
   }
 
   return (
-    <AbsoluteFill style={{ pointerEvents: "none" }}>
+    <AbsoluteFill style={{ pointerEvents: "none", opacity: stillHandoff }}>
       {/* Hollow square outline — LTR wipe in 1s, spinning 4-colour Gemini glow */}
       <div
         style={{
@@ -5124,6 +5188,7 @@ const GeneratedSampleFrame: React.FC = () => {
           height: frameSize,
           transform: "translate(-50%, -50%)",
           borderRadius: SAMPLE_FRAME_RADIUS,
+          opacity: outlineHandoff,
           pointerEvents: "none",
         }}
       >
@@ -5227,50 +5292,599 @@ const GeneratedSampleFrame: React.FC = () => {
 };
 
 /**
+ * Beat after Drive UI: window morphs into a left Drive node, arrow draws
+ * right, then "Gom bien the" code frame pops and types.
+ */
+const DRIVE_OUT_ARROW_START =
+  DRIVE_MORPH_START + DRIVE_MORPH_DURATION + 4;
+const DRIVE_OUT_ARROW_DRAW = 22;
+const DRIVE_OUT_ARROW_GAP = 26;
+const DRIVE_OUT_ARROW_HEAD = 16;
+const DRIVE_OUT_PULSE_WIDTH = 90;
+const DRIVE_OUT_PULSE_TRAVEL = DRIVE_OUT_ARROW_DRAW;
+const GOM_FRAME_POP_START = DRIVE_OUT_ARROW_START + DRIVE_OUT_ARROW_DRAW;
+const GOM_TYPE_START = GOM_FRAME_POP_START + 4;
+
+const GOM_LINES = [
+  "// Gom biến thể + payload Telegram / log.",
+  "const esc = (s) => String(s ?? '')",
+  "  .replace(/&/g, '&amp;')",
+  "  .replace(/</g, '&lt;')",
+  "  .replace(/>/g, '&gt;');",
+  "",
+  "const items = $('So chuoi').all();",
+  "const drive = $('Upload Drive').all();",
+  "",
+  "const first = items[0].json;",
+  "const c = first.content;",
+  "",
+  "const dong = items.map((it, i) => {",
+  "  const link = drive[i]?.json?.webViewLink || drive[i]?.json?.id || '';",
+  "  const co = it.json.pass ? '✅' : '⚠️';",
+  "  return `${co} Bien the #${it.json.index} — layout ${it.json.layout_id}",
+  "    \\n${it.json.pass ? 'Chu OK' : it.json.canh_bao}\\n${link}`;",
+  "}).join('\\n\\n');",
+  "",
+  "const raw = `📅 Bai post ${new Date().toISOString().slice(0, 10)}\\n\\n`",
+  "  + `TITLE: ${c.title}\\nEYEBROW: ${c.eyebrow}\\nCTA: ${c.cta}\\n\\n`",
+  "  + c.features.map((f, i) =>",
+  "      `${i + 1}. [${f.category}] ${f.main_line}\\n   ${f.sub_line}`",
+  "    ).join('\\n')",
+  "  + `\\n\\n--- CAPTION ---\\n${c.caption_facebook}",
+  "\\n\\n--- KIEM TRA ---\\n${dong}`;",
+  "",
+  "const text = esc(raw).slice(0, 3900);",
+  "const logRow = new Date().toISOString();",
+  "const stamp = logRow.slice(0, 19);",
+  "const tgMedia = items.map((it, i) => ({",
+  "  type: 'photo',",
+  "  media: drive[i]?.json?.webContentLink",
+  "    || drive[i]?.json?.webViewLink || '',",
+  "}));",
+  "const chiPhi = items.reduce((s, it) => s + 0.04, 0);",
+  "",
+  "return [{ json: {",
+  "  chatId: 'YOUR_CHAT_ID',",
+  "  text,",
+  "  stamp,",
+  "  bienThe: first.index ?? 1,",
+  "  tgMedia,",
+  "  logRow: {",
+  "    date: logRow,",
+  "    title: c.title || '',",
+  "    eyebrow: c.eyebrow || '',",
+  "    layout_id: items.map(i2 => i2.json.layout_id).join(','),",
+  "    value_ids: first.value_ids,",
+  "    asset_ids: items.map(i2 => i2.json.asset_ids).join(' ; '),",
+  "    so_lan_thu: 1,",
+  "    drive_links: drive.map(d => d?.json?.webViewLink || '').join(' ; '),",
+  "    status: 'pending',",
+  "    'cost in usd': chiPhi.toFixed(3),",
+  "  },",
+  "}, binary: items[0].binary?.data",
+  "  ? { data: items[0].binary.data } : {} }];",
+] as const;
+
+const GOM_LINE_STARTS = burstLineStarts(GOM_LINES);
+
+const DriveNode: React.FC = () => {
+  const absFrame = useCurrentFrame();
+  const { fps, width, height } = useVideoConfig();
+  const local = absFrame - DRIVE_NODE_POP_START;
+
+  if (local < 0) {
+    return null;
+  }
+
+  const popScale = spring({
+    frame: Math.max(0, local),
+    fps,
+    config: { damping: 9, mass: 0.85, stiffness: 140 },
+  });
+  const enterOpacity = interpolate(local, [0, 5], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+  // Clears as Gom code frame slides into this seat (TelegramPhoneReveal).
+  const exitOpacity = interpolate(
+    absFrame,
+    [TELEGRAM_SLIDE_START, TELEGRAM_SLIDE_START + 14],
+    [1, 0],
+    { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
+  );
+  if (exitOpacity <= 0.001) {
+    return null;
+  }
+
+  const x = width * DRIVE_NODE_X_RATIO;
+  const cy = height / 2;
+  const nub = 14;
+
+  return (
+    <AbsoluteFill style={{ opacity: exitOpacity }}>
+      <div
+        style={{
+          position: "absolute",
+          left: x,
+          top: cy,
+          width: DRIVE_NODE_SIZE,
+          height: DRIVE_NODE_SIZE,
+          transform: `translate(-50%, -50%) scale(${popScale})`,
+          opacity: enterOpacity,
+          willChange: "transform, opacity",
+        }}
+      >
+        <div
+          style={{
+            position: "absolute",
+            left: -nub / 2,
+            top: "50%",
+            width: nub,
+            height: nub,
+            borderRadius: "50%",
+            backgroundColor: "#1E1E24",
+            border: "1.5px solid rgba(180, 180, 190, 0.55)",
+            transform: "translateY(-50%)",
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            right: -nub / 2,
+            top: "50%",
+            width: nub,
+            height: nub,
+            borderRadius: "50%",
+            backgroundColor: "#1E1E24",
+            border: "1.5px solid rgba(180, 180, 190, 0.55)",
+            transform: "translateY(-50%)",
+          }}
+        />
+        <div
+          style={{
+            width: "100%",
+            height: "100%",
+            borderRadius: 18,
+            backgroundColor: "#1E1E24",
+            border: "1.5px solid rgba(180, 180, 190, 0.55)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            boxShadow: "0 8px 28px rgba(0, 0, 0, 0.45)",
+          }}
+        >
+          <Img
+            src={staticFile("logos/googleDrive.webp")}
+            style={{ width: 56, height: 56 }}
+          />
+        </div>
+      </div>
+    </AbsoluteFill>
+  );
+};
+
+/** Arrow from Drive node (left) → Gom bien the code frame (right). */
+const DriveOutboundArrow: React.FC = () => {
+  const absFrame = useCurrentFrame();
+  const frame = absFrame - DRIVE_OUT_ARROW_START;
+  const { width, height } = useVideoConfig();
+
+  const cy = height / 2;
+  const driveCenterX = width * DRIVE_NODE_X_RATIO;
+  const codeCenterX = width * SHEETS_HUB_X_RATIO;
+  const lineStartX = driveCenterX + DRIVE_NODE_SIZE / 2 + DRIVE_OUT_ARROW_GAP;
+  const lineEndX = codeCenterX - CODE_FRAME_WIDTH / 2 - DRIVE_OUT_ARROW_GAP;
+  const fullLength = Math.max(0, lineEndX - lineStartX);
+
+  const drawProgress = interpolate(frame, [0, DRIVE_OUT_ARROW_DRAW], [0, 1], {
+    easing: INTRODUCE_EASING,
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+  const currentLength = fullLength * drawProgress;
+  const travelProgress = interpolate(frame, [0, DRIVE_OUT_PULSE_TRAVEL], [0, 1], {
+    easing: INTRODUCE_EASING,
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+  const streakX =
+    lineStartX +
+    Math.max(0, fullLength - DRIVE_OUT_PULSE_WIDTH) * travelProgress;
+  const streakOpacity = interpolate(
+    frame,
+    [0, 4, DRIVE_OUT_PULSE_TRAVEL - 3, DRIVE_OUT_PULSE_TRAVEL],
+    [0, 1, 1, 0],
+    { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
+  );
+
+  const exitOpacity = interpolate(
+    absFrame,
+    [TELEGRAM_SLIDE_START, TELEGRAM_SLIDE_START + 14],
+    [1, 0],
+    { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
+  );
+
+  if (frame < 0 || exitOpacity <= 0.001) {
+    return null;
+  }
+
+  return (
+    <AbsoluteFill style={{ opacity: exitOpacity }}>
+      <div
+        style={{
+          position: "absolute",
+          left: lineStartX,
+          top: cy - 1.5,
+          width: currentLength,
+          height: 3,
+          backgroundColor: "rgba(255, 255, 255, 0.35)",
+          willChange: "width",
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          left: lineStartX + currentLength - 2,
+          top: cy,
+          width: 0,
+          height: 0,
+          borderTop: `${DRIVE_OUT_ARROW_HEAD / 2}px solid transparent`,
+          borderBottom: `${DRIVE_OUT_ARROW_HEAD / 2}px solid transparent`,
+          borderLeft: `${DRIVE_OUT_ARROW_HEAD}px solid rgba(255, 255, 255, 0.35)`,
+          transform: "translateY(-50%)",
+          opacity: drawProgress,
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          left: streakX,
+          top: cy - 14,
+          width: DRIVE_OUT_PULSE_WIDTH,
+          height: 28,
+          borderRadius: "50%",
+          background: `radial-gradient(ellipse at center, ${COLORS.accent} 0%, rgba(56,189,248,0.45) 28%, rgba(56,189,248,0) 72%)`,
+          opacity: streakOpacity,
+          filter: "blur(1px)",
+          pointerEvents: "none",
+        }}
+      />
+    </AbsoluteFill>
+  );
+};
+
+const GomBienTheFrame: React.FC = () => {
+  const absFrame = useCurrentFrame();
+  const { width } = useVideoConfig();
+  const fromX = width * SHEETS_HUB_X_RATIO;
+  const toX = width * DRIVE_NODE_X_RATIO;
+  const slide = interpolate(
+    absFrame,
+    [TELEGRAM_SLIDE_START, TELEGRAM_SLIDE_START + TELEGRAM_SLIDE_DURATION],
+    [0, 1],
+    {
+      easing: INTRODUCE_EASING,
+      extrapolateLeft: "clamp",
+      extrapolateRight: "clamp",
+    },
+  );
+  const anchorX = interpolate(slide, [0, 1], [fromX, toX]);
+
+  return (
+    <CodeFramePanel
+      popStart={GOM_FRAME_POP_START}
+      typeStart={GOM_TYPE_START}
+      title="Gom bien the"
+      lines={GOM_LINES}
+      lineStarts={GOM_LINE_STARTS}
+      skipMorph
+      zIndex={2}
+      anchorX={anchorX}
+      exitStart={TG_FADE_START}
+      exitDuration={TG_FADE_DURATION}
+    />
+  );
+};
+
+/**
  * Main scene content for PortfolioMotion — typewriter → Introduce → n8n →
  * execute → Manual Trigger → Sheets → code frames → GeminiCopyEmit.
+ *
+ * Each beat is gated by AbsoluteSequence so Remotion unmounts it outside
+ * its visible window (keeps Studio preview light). Frame math stays absolute.
  */
 export const Scene1Test: React.FC = () => {
+  const frame = useCurrentFrame();
+  const sceneEnd = VIDEO.durationInFrames;
+  const introClearEnd = EXIT_START + EXIT_DURATION;
+  const executeFadeEnd = CLICK_END + EXECUTE_FADE_DURATION;
+  const workflowLegacyEnd =
+    WORKFLOW_LEGACY_FADE_START + WORKFLOW_LEGACY_FADE_DURATION;
+  const carouselMorphEnd = CAROUSEL_MORPH_START + CAROUSEL_MORPH_DURATION;
+  const sheetsExitEnd = CODE_LEGACY_FADE_START + CODE_LEGACY_FADE_DURATION;
+  const sheetsArrowExitEnd = CODE_MORPH_START + 12;
+  const codePanelsMorphEnd = CODE_MORPH_START + CODE_MORPH_DURATION;
+  const codeGeminiExitEnd = GEMINI_CENTER_START + CODE_GEMINI_EXIT_DURATION;
+  const copyClusterExitEnd = ILLUSTRATE_START + ILLUSTRATE_FADE_DURATION;
+  const mergeExitEnd = MERGE_START + MERGE_DURATION;
+  const imgLeftExitEnd = IMG_EXIT_START + IMG_EXIT_DURATION;
+  const geminiImageExitEnd = DRIVE_START + 9;
+
+  const AUDIO_FADE_START = 1928;
+  const AUDIO_FADE_DURATION = 55;
+  const audioVolume = interpolate(
+    frame,
+    [AUDIO_FADE_START, AUDIO_FADE_START + AUDIO_FADE_DURATION],
+    [1, 0],
+    {
+      extrapolateLeft: "clamp",
+      extrapolateRight: "clamp",
+    },
+  );
+
   return (
     <>
       <Audio
         src={staticFile(
           "audio/alex-morgan-corporate-business-background-568143.mp3",
         )}
+        volume={audioVolume}
       />
-      <HookCard />
-      <IntroClearOut>
-        <CameraMotionBlur samples={8} shutterAngle={360}>
-          <IntroduceText />
-          <N8nLogoPipeline />
-        </CameraMotionBlur>
-      </IntroClearOut>
-      <ExecuteButton />
-      <CursorPointer />
-      <ManualTrigger />
-      <WorkflowArrow />
-      <AnimatedSheetCarousel />
-      <GoogleSheetsNode />
-      <SheetsOutboundArrow />
+
+      <AbsoluteSequence from={0} durationInFrames={HOOK_CARD_EXIT_END + 1}>
+        <HookCard />
+      </AbsoluteSequence>
+
+      <AbsoluteSequence
+        from={INTRODUCE_START}
+        durationInFrames={introClearEnd - INTRODUCE_START + 1}
+      >
+        <IntroClearOut>
+          <CameraMotionBlur samples={8} shutterAngle={360}>
+            <IntroduceText />
+            <N8nLogoPipeline />
+          </CameraMotionBlur>
+        </IntroClearOut>
+      </AbsoluteSequence>
+
+      <AbsoluteSequence
+        from={BUTTON_START}
+        durationInFrames={executeFadeEnd - BUTTON_START + 1}
+      >
+        <ExecuteButton />
+      </AbsoluteSequence>
+
+      <AbsoluteSequence
+        from={CURSOR_START}
+        durationInFrames={executeFadeEnd - CURSOR_START + 1}
+      >
+        <CursorPointer />
+      </AbsoluteSequence>
+
+      <AbsoluteSequence
+        from={MANUAL_START}
+        durationInFrames={workflowLegacyEnd - MANUAL_START + 1}
+      >
+        <ManualTrigger />
+      </AbsoluteSequence>
+
+      <AbsoluteSequence
+        from={ARROW_START}
+        durationInFrames={workflowLegacyEnd - ARROW_START + 1}
+      >
+        <WorkflowArrow />
+      </AbsoluteSequence>
+
+      <AbsoluteSequence
+        from={ARROW_START}
+        durationInFrames={carouselMorphEnd - ARROW_START + 1}
+      >
+        <AnimatedSheetCarousel />
+      </AbsoluteSequence>
+
+      <AbsoluteSequence
+        from={SHEETS_NODE_POP_START}
+        durationInFrames={sheetsExitEnd - SHEETS_NODE_POP_START + 1}
+      >
+        <GoogleSheetsNode />
+      </AbsoluteSequence>
+
+      <AbsoluteSequence
+        from={SHEETS_OUT_ARROW_START}
+        durationInFrames={sheetsArrowExitEnd - SHEETS_OUT_ARROW_START + 1}
+      >
+        <SheetsOutboundArrow />
+      </AbsoluteSequence>
+
       {/* Behind Loc_phrase */}
-      <GeminiPayloadFrame />
-      <CodeFrame />
-      <CodeNode />
-      <CodeOutboundArrow />
-      <GeminiCopyEmit />
-      <GeminiLogoReveal />
-      <ReviewSplitArrows />
-      <LayoutOrbit />
-      <ReviewCheckFrame />
-      <ReviewLayoutFrame />
-      <IllustrateCheckList />
-      <MascotArcCarousel />
-      <PromptReturnFrame />
-      <ImageBodyCodeFrame />
-      <ImagePromptCodeFrame />
-      <ImageOutboundArrow />
-      <GeminiImageReveal />
-      <GeneratedSampleFrame />
+      <AbsoluteSequence
+        from={GEMINI_FRAME_POP_START}
+        durationInFrames={codePanelsMorphEnd - GEMINI_FRAME_POP_START + 1}
+      >
+        <GeminiPayloadFrame />
+      </AbsoluteSequence>
+
+      <AbsoluteSequence
+        from={CODE_FRAME_POP_START}
+        durationInFrames={codePanelsMorphEnd - CODE_FRAME_POP_START + 1}
+      >
+        <CodeFrame />
+      </AbsoluteSequence>
+
+      <AbsoluteSequence
+        from={CODE_NODE_POP_START}
+        durationInFrames={codeGeminiExitEnd - CODE_NODE_POP_START + 1}
+      >
+        <CodeNode />
+      </AbsoluteSequence>
+
+      <AbsoluteSequence
+        from={CODE_OUT_ARROW_START}
+        durationInFrames={codeGeminiExitEnd - CODE_OUT_ARROW_START + 1}
+      >
+        <CodeOutboundArrow />
+      </AbsoluteSequence>
+
+      <AbsoluteSequence
+        from={GEMINI_THINK_START}
+        durationInFrames={copyClusterExitEnd - GEMINI_THINK_START + 1}
+      >
+        <GeminiCopyEmit />
+      </AbsoluteSequence>
+
+      <AbsoluteSequence
+        from={GEMINI_LOGO_POP_START}
+        durationInFrames={copyClusterExitEnd - GEMINI_LOGO_POP_START + 1}
+      >
+        <GeminiLogoReveal />
+      </AbsoluteSequence>
+
+      <AbsoluteSequence
+        from={REVIEW_ARROW_START}
+        durationInFrames={copyClusterExitEnd - REVIEW_ARROW_START + 1}
+      >
+        <ReviewSplitArrows />
+      </AbsoluteSequence>
+
+      <AbsoluteSequence
+        from={ILLUSTRATE_DETAIL_START}
+        durationInFrames={imgLeftExitEnd - ILLUSTRATE_DETAIL_START + 1}
+      >
+        <LayoutOrbit />
+      </AbsoluteSequence>
+
+      <AbsoluteSequence
+        from={REVIEW_FRAME_POP_START}
+        durationInFrames={mergeExitEnd - REVIEW_FRAME_POP_START + 1}
+      >
+        <ReviewCheckFrame />
+      </AbsoluteSequence>
+
+      <AbsoluteSequence
+        from={REVIEW_FRAME_POP_START}
+        durationInFrames={mergeExitEnd - REVIEW_FRAME_POP_START + 1}
+      >
+        <ReviewLayoutFrame />
+      </AbsoluteSequence>
+
+      <AbsoluteSequence
+        from={ILLUSTRATE_DETAIL_START}
+        durationInFrames={mergeExitEnd - ILLUSTRATE_DETAIL_START + 1}
+      >
+        <IllustrateCheckList />
+      </AbsoluteSequence>
+
+      <AbsoluteSequence
+        from={ILLUSTRATE_DETAIL_START}
+        durationInFrames={imgLeftExitEnd - ILLUSTRATE_DETAIL_START + 1}
+      >
+        <MascotArcCarousel />
+      </AbsoluteSequence>
+
+      <AbsoluteSequence
+        from={PROMPT_REVEAL_START}
+        durationInFrames={imgLeftExitEnd - PROMPT_REVEAL_START + 1}
+      >
+        <PromptReturnFrame />
+      </AbsoluteSequence>
+
+      <AbsoluteSequence
+        from={IMG_BODY_POP}
+        durationInFrames={imgLeftExitEnd - IMG_BODY_POP + 1}
+      >
+        <ImageBodyCodeFrame />
+      </AbsoluteSequence>
+
+      <AbsoluteSequence
+        from={IMG_PROMPT_POP}
+        durationInFrames={imgLeftExitEnd - IMG_PROMPT_POP + 1}
+      >
+        <ImagePromptCodeFrame />
+      </AbsoluteSequence>
+
+      <AbsoluteSequence
+        from={IMG_ARROW_START}
+        durationInFrames={imgLeftExitEnd - IMG_ARROW_START + 1}
+      >
+        <ImageOutboundArrow />
+      </AbsoluteSequence>
+
+      <AbsoluteSequence
+        from={IMG_GEMINI_POP}
+        durationInFrames={geminiImageExitEnd - IMG_GEMINI_POP + 1}
+      >
+        <GeminiImageReveal />
+      </AbsoluteSequence>
+
+      <AbsoluteSequence
+        from={SAMPLE_REVEAL_START}
+        durationInFrames={DRIVE_START - SAMPLE_REVEAL_START + 1}
+      >
+        <GeneratedSampleFrame />
+      </AbsoluteSequence>
+
+      <AbsoluteSequence
+        from={DRIVE_START}
+        durationInFrames={
+          DRIVE_MORPH_START + DRIVE_MORPH_DURATION - DRIVE_START + 1
+        }
+      >
+        <DriveIntegrationScene />
+      </AbsoluteSequence>
+
+      <AbsoluteSequence
+        from={DRIVE_NODE_POP_START}
+        durationInFrames={TELEGRAM_SLIDE_START + 14 - DRIVE_NODE_POP_START + 1}
+      >
+        <DriveNode />
+      </AbsoluteSequence>
+
+      <AbsoluteSequence
+        from={DRIVE_OUT_ARROW_START}
+        durationInFrames={TELEGRAM_SLIDE_START + 14 - DRIVE_OUT_ARROW_START + 1}
+      >
+        <DriveOutboundArrow />
+      </AbsoluteSequence>
+
+      <AbsoluteSequence
+        from={GOM_FRAME_POP_START}
+        durationInFrames={TG_FADE_START + TG_FADE_DURATION - GOM_FRAME_POP_START + 1}
+      >
+        <GomBienTheFrame />
+      </AbsoluteSequence>
+
+      {/* Scene: TelegramPhoneReveal — undo cue: "undo TelegramPhoneReveal" */}
+      <AbsoluteSequence
+        from={TG_ARROW_START}
+        durationInFrames={TG_FADE_START + TG_FADE_DURATION - TG_ARROW_START + 1}
+      >
+        <TelegramOutboundArrow
+          leftNodeSize={CODE_FRAME_WIDTH}
+          leftXRatio={DRIVE_NODE_X_RATIO}
+        />
+      </AbsoluteSequence>
+
+      <AbsoluteSequence
+        from={TG_NODE_POP_START}
+        durationInFrames={TG_FADE_START + TG_FADE_DURATION - TG_NODE_POP_START + 1}
+      >
+        <TelegramNode />
+      </AbsoluteSequence>
+
+      <AbsoluteSequence
+        from={TG_NODE_POP_START}
+        durationInFrames={sceneEnd - TG_NODE_POP_START}
+      >
+        {/* Scene: TelegramEndCredit — undo cue: "undo TelegramEndCredit" */}
+        <TelegramEndExit>
+          <TelegramCameraRig>
+            <TelegramLogoFlight />
+            <IPhoneTelegramReveal />
+          </TelegramCameraRig>
+          {/* Scene: TelegramYesConfirm — undo cue: "undo TelegramYesConfirm" */}
+          <TelegramTickConfirm />
+        </TelegramEndExit>
+      </AbsoluteSequence>
     </>
   );
 };

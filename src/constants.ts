@@ -4,12 +4,12 @@ export const VIDEO = {
   width: 1920,
   height: 1080,
   fps: 30,
-  durationInFrames: 1830,
+  durationInFrames: 2150,
 } as const;
 
 /** Scene timeline (frames). Sum = VIDEO.durationInFrames. */
 export const SCENES = {
-  intro: { from: 0, durationInFrames: 1830 },
+  intro: { from: 0, durationInFrames: 2150 },
 } as const;
 
 /**
