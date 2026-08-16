@@ -34,7 +34,7 @@ export const AuroraBackground: React.FC<AuroraBackgroundProps> = ({
       <div
         className="pointer-events-none absolute h-[600px] w-[600px] rounded-full opacity-40 blur-[140px]"
         style={{
-          background: "radial-gradient(circle, #3b82f6 0%, transparent 70%)",
+          background: "radial-gradient(circle, #EA4B71 0%, transparent 70%)",
           left: `${aura1X}%`,
           top: `${aura1Y}%`,
           transform: "translate(-50%, -50%)",
@@ -43,7 +43,7 @@ export const AuroraBackground: React.FC<AuroraBackgroundProps> = ({
       <div
         className="pointer-events-none absolute h-[500px] w-[500px] rounded-full opacity-35 blur-[120px]"
         style={{
-          background: "radial-gradient(circle, #ec4899 0%, transparent 70%)",
+          background: "radial-gradient(circle, #F97316 0%, transparent 70%)",
           left: `${aura2X}%`,
           top: `${aura2Y}%`,
           transform: "translate(-50%, -50%)",

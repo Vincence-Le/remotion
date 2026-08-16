@@ -32,9 +32,22 @@ export const TG_NODE_SIZE = 128;
 export const TG_NODE_POP_START = TG_ARROW_START + TG_ARROW_DRAW;
 export const TG_NODE_X_RATIO = 0.5 + 0.26;
 
-/** Hold the settled Telegram node, then fade cluster + fly the logo. */
+/**
+ * Hold the settled Telegram node, then fade cluster + fly the logo.
+ * Code frame clears first; arrow + Telegram node chrome linger a beat longer.
+ */
+export const TG_CODE_FADE_START = 1725;
+export const TG_CODE_FADE_END = 1736;
+export const TG_CODE_FADE_DURATION = TG_CODE_FADE_END - TG_CODE_FADE_START;
+export const TG_SIDE_FADE_START = 1725;
+export const TG_SIDE_FADE_END = 1746;
+export const TG_SIDE_FADE_DURATION = TG_SIDE_FADE_END - TG_SIDE_FADE_START;
+/** @deprecated alias — phone expand still keyed off the old fade beat */
 export const TG_FADE_START = 1731;
-export const TG_FADE_DURATION = 18;
+export const TG_FADE_END = TG_CODE_FADE_END;
+export const TG_FADE_DURATION = TG_CODE_FADE_DURATION;
+/** Cluster exits by growing toward camera (matches iPhone pop-in feel). */
+export const TG_FADE_SCALE_TO = 1.21;
 /** Logo leaves the node and arcs to the iPhone corner. */
 export const TG_LOGO_FLY_START = 1737;
 /** Slower logo flight so the hand-off reads clearly. */
@@ -42,6 +55,10 @@ export const TG_LOGO_FLY_DURATION = 40;
 
 export const TG_PHONE_EXPAND_START = TG_FADE_START;
 export const TG_PHONE_EXPAND_DURATION = 26;
+/** After entrance settles, phone gently grows until just before camera zoom. */
+export const TG_PHONE_BREATH_START = 1748;
+export const TG_PHONE_BREATH_END = 1819;
+export const TG_PHONE_BREATH_SCALE = 1.14;
 
 export const TG_IMAGE_START = TG_PHONE_EXPAND_START + 18;
 export const TG_SCROLL_START = TG_IMAGE_START + 18;
@@ -52,7 +69,7 @@ export const TG_MSG2_START = TG_SCROLL_START + TG_SCROLL_DURATION + 6;
  * Scene beat: **TelegramYesConfirm** (camera zoom → Yes click → tick).
  * Undo cue: say `undo TelegramYesConfirm`
  */
-export const TG_CAMERA_ZOOM_START = 1827;
+export const TG_CAMERA_ZOOM_START = 1825;
 export const TG_CAMERA_ZOOM_DURATION = 42;
 export const TG_YES_CLICK_START =
   TG_CAMERA_ZOOM_START + TG_CAMERA_ZOOM_DURATION - 4;
@@ -85,13 +102,16 @@ const TG_BG = "#1b2a24";
 const TG_BUBBLE = "#2b5278";
 const TICK_GREEN = "#22c55e";
 const EASE_OUT = Easing.bezier(0.16, 1, 0.3, 1);
-/** Zoom camera: longer soft landing than EASE_OUT (brake stretches further). */
-const EASE_ZOOM_OUT = Easing.bezier(0.05, 0.7, 0.08, 1);
 /**
- * Logo flight: short ease-in for launch (a bit snappier ramp), then the
- * same soft ease-out landing character as EASE_OUT (0.3, 1).
+ * Zoom camera: short ease-in for launch acceleration, then a long soft land.
+ * (Previous pure ease-out jumped too hard on the first frames.)
  */
-const EASE_LOGO_FLY = Easing.bezier(0.28, 0, 0.3, 1);
+const EASE_ZOOM_OUT = Easing.bezier(0.38, 0, 0.1, 1);
+/**
+ * Logo flight: accelerate → rush the mid → soft land.
+ * Avoid (…, 0.3, 1) style ease-outs that flatten early and kill mid speed.
+ */
+const EASE_LOGO_FLY = Easing.bezier(0.55, 0.02, 0.2, 1);
 const EASE_TRAVEL = Easing.bezier(0.85, 0, 0.15, 1);
 /** Catchy end wipe — accelerates out, lands soft. */
 const EASE_END_SLIDE = Easing.bezier(0.55, 0.02, 0.18, 1);
@@ -141,6 +161,30 @@ const logoSeatOnPhone = (frameWidth: number, frameHeight: number) => {
   };
 };
 
+/** Soft pre-zoom grow: 1 → ~1.14 from breath start to just before camera. */
+export const useTelegramPhoneBreath = () => {
+  const absFrame = useCurrentFrame();
+  return interpolate(
+    absFrame,
+    [TG_PHONE_BREATH_START, TG_PHONE_BREATH_END],
+    [1, TG_PHONE_BREATH_SCALE],
+    {
+      easing: Easing.inOut(Easing.sin),
+      extrapolateLeft: "clamp",
+      extrapolateRight: "clamp",
+    },
+  );
+};
+
+const breathePoint = (
+  phone: { x: number; y: number },
+  point: { x: number; y: number },
+  breath: number,
+) => ({
+  x: phone.x + (point.x - phone.x) * breath,
+  y: phone.y + (point.y - phone.y) * breath,
+});
+
 /** Composition-space focus for the ✅ Yes button (left inline button). */
 export const yesButtonFocus = (frameWidth: number, frameHeight: number) => {
   const { x, y } = phoneCenter(frameWidth, frameHeight);
@@ -185,6 +229,32 @@ layout: L03
 value: V001,V005,V010
 asset: A008,A001,A009`;
 
+/** Fade + grow for arrow / Telegram node chrome (slower than the code frame). */
+export const useTelegramClusterExit = () => {
+  const absFrame = useCurrentFrame();
+  const opacity = interpolate(
+    absFrame,
+    [TG_SIDE_FADE_START, TG_SIDE_FADE_END],
+    [1, 0],
+    {
+      easing: EASE_OUT,
+      extrapolateLeft: "clamp",
+      extrapolateRight: "clamp",
+    },
+  );
+  const scale = interpolate(
+    absFrame,
+    [TG_SIDE_FADE_START, TG_SIDE_FADE_END],
+    [1, TG_FADE_SCALE_TO],
+    {
+      easing: EASE_OUT,
+      extrapolateLeft: "clamp",
+      extrapolateRight: "clamp",
+    },
+  );
+  return { opacity, scale };
+};
+
 /** Outbound arrow: left (Gom / Drive seat) → right (Telegram seat). */
 export const TelegramOutboundArrow: React.FC<{
   leftNodeSize: number;
@@ -193,6 +263,7 @@ export const TelegramOutboundArrow: React.FC<{
   const absFrame = useCurrentFrame();
   const frame = absFrame - TG_ARROW_START;
   const { width, height } = useVideoConfig();
+  const { opacity: exitOp, scale: exitScale } = useTelegramClusterExit();
 
   if (frame < 0) {
     return null;
@@ -225,16 +296,15 @@ export const TelegramOutboundArrow: React.FC<{
     { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
   );
 
-  // Fade with the code cluster (logo is a separate flying layer).
-  const exitOp = interpolate(
-    absFrame,
-    [TG_FADE_START, TG_FADE_START + TG_FADE_DURATION],
-    [1, 0],
-    { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
-  );
-
   return (
-    <AbsoluteFill style={{ opacity: exitOp }}>
+    <AbsoluteFill
+      style={{
+        opacity: exitOp,
+        transform: `scale(${exitScale})`,
+        transformOrigin: "50% 50%",
+        willChange: "transform, opacity",
+      }}
+    >
       <div
         style={{
           position: "absolute",
@@ -283,6 +353,7 @@ export const TelegramNode: React.FC = () => {
   const absFrame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
   const local = absFrame - TG_NODE_POP_START;
+  const { opacity: chromeOpacity, scale: exitScale } = useTelegramClusterExit();
 
   if (local < 0) {
     return null;
@@ -297,12 +368,6 @@ export const TelegramNode: React.FC = () => {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
-  const chromeOpacity = interpolate(
-    absFrame,
-    [TG_FADE_START, TG_FADE_START + TG_FADE_DURATION],
-    [1, 0],
-    { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
-  );
 
   if (chromeOpacity <= 0.001) {
     return null;
@@ -321,7 +386,7 @@ export const TelegramNode: React.FC = () => {
           top: cy,
           width: TG_NODE_SIZE,
           height: TG_NODE_SIZE,
-          transform: `translate(-50%, -50%) scale(${enterScale})`,
+          transform: `translate(-50%, -50%) scale(${enterScale * exitScale})`,
           willChange: "transform, opacity",
         }}
       >
@@ -374,6 +439,7 @@ export const TelegramLogoFlight: React.FC = () => {
   const absFrame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
   const local = absFrame - TG_NODE_POP_START;
+  const breath = useTelegramPhoneBreath();
 
   if (local < 0) {
     return null;
@@ -391,7 +457,9 @@ export const TelegramLogoFlight: React.FC = () => {
 
   const fromX = width * TG_NODE_X_RATIO;
   const fromY = height / 2;
-  const seat = logoSeatOnPhone(width, height);
+  const phone = phoneCenter(width, height);
+  const rawSeat = logoSeatOnPhone(width, height);
+  const seat = breathePoint(phone, rawSeat, breath);
 
   const fly = interpolate(
     absFrame,
@@ -412,7 +480,7 @@ export const TelegramLogoFlight: React.FC = () => {
   const cp2y = seat.y + height * 0.1;
   const x = cubicBezier1D(fly, fromX, cp1x, cp2x, seat.x);
   const y = cubicBezier1D(fly, fromY, cp1y, cp2y, seat.y);
-  const size = interpolate(fly, [0, 1], [LOGO_IN_NODE, LOGO_ON_PHONE]);
+  const size = interpolate(fly, [0, 1], [LOGO_IN_NODE, LOGO_ON_PHONE * breath]);
   const spin = interpolate(fly, [0, 1], [0, -20]);
 
   return (
@@ -827,6 +895,7 @@ export const IPhoneTelegramReveal: React.FC = () => {
   const absFrame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
   const local = absFrame - TG_PHONE_EXPAND_START;
+  const breath = useTelegramPhoneBreath();
 
   if (local < 0) {
     return null;
@@ -841,8 +910,9 @@ export const IPhoneTelegramReveal: React.FC = () => {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
-  // Entrance pop only — camera zoom is handled by TelegramCameraRig.
-  const scale = interpolate(pop, [0, 1], [0.78, 1]);
+  // Entrance pop, then a slow +14% breath until camera zoom.
+  const enterScale = interpolate(pop, [0, 1], [0.78, 1]);
+  const scale = enterScale * breath;
   const { x, y } = phoneCenter(width, height);
 
   return (
@@ -860,7 +930,9 @@ export const IPhoneTelegramReveal: React.FC = () => {
           background: `linear-gradient(160deg, ${COSMIC_ORANGE} 0%, ${COSMIC_ORANGE_DARK} 55%, #c44a1a 100%)`,
           boxShadow: `
             0 28px 70px rgba(0,0,0,0.5),
-            0 0 28px rgba(255,122,60,0.22),
+            0 0 28px rgba(255,122,60,0.38),
+            0 0 64px rgba(255,122,60,0.3),
+            0 0 110px rgba(232,90,34,0.18),
             0 1px 0 rgba(255,255,255,0.28) inset
           `,
           overflow: "hidden",
@@ -952,8 +1024,9 @@ export const IPhoneTelegramReveal: React.FC = () => {
 export const useTelegramCameraZoom = () => {
   const absFrame = useCurrentFrame();
   const { width, height } = useVideoConfig();
+  const breath = useTelegramPhoneBreath();
   const phone = phoneCenter(width, height);
-  const yes = yesButtonFocus(width, height);
+  const yes = breathePoint(phone, yesButtonFocus(width, height), breath);
 
   const zoomT = interpolate(
     absFrame,
@@ -966,20 +1039,21 @@ export const useTelegramCameraZoom = () => {
     },
   );
 
-  const zoom = interpolate(zoomT, [0, 1], [1, 2.2]);
+  const zoom = interpolate(zoomT, [0, 1], [1, 2.15]);
 
   // Rest pose must be identity (zoom=1, tx=ty=0). Blend look/target with zoomT.
+  // Keep Yes in frame while leaving ~50px clearance under the orange bezel.
   const lookX = phone.x;
-  const lookYEnd = phone.y * 0.45 + yes.y * 0.55;
+  const lookYEnd = phone.y * 0.4 + yes.y * 0.6;
   const lookY = interpolate(zoomT, [0, 1], [phone.y, lookYEnd]);
   const targetX = width / 2;
-  const targetY = interpolate(zoomT, [0, 1], [phone.y, height * 0.46]);
+  const targetY = interpolate(zoomT, [0, 1], [phone.y, height * 0.44]);
 
   const tx = targetX - lookX * zoom;
   const ty = targetY - lookY * zoom;
 
   // Screen-space right edge of the phone after the camera transform.
-  const phoneRightScreen = (phone.x + PHONE_W / 2) * zoom + tx;
+  const phoneRightScreen = (phone.x + (PHONE_W / 2) * breath) * zoom + tx;
 
   return {
     zoom,

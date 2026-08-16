@@ -34,8 +34,10 @@ import {
   TELEGRAM_SLIDE_DURATION,
   TG_ARROW_START,
   TG_NODE_POP_START,
-  TG_FADE_START,
-  TG_FADE_DURATION,
+  TG_FADE_SCALE_TO,
+  TG_CODE_FADE_START,
+  TG_CODE_FADE_DURATION,
+  TG_SIDE_FADE_END,
   TelegramOutboundArrow,
   TelegramNode,
   TelegramLogoFlight,
@@ -76,7 +78,7 @@ const FRAMES_PER_CHAR = (53 - TYPE_START) / FULL_TEXT.length;
 const CARD_EXIT_EASING = Easing.bezier(0.32, 0.72, 0, 1);
 
 /**
- * Scene1Test beat-sync retimes (earlier than Scene1 shared constants).
+ * MainScene beat-sync retimes (earlier than Scene1 shared constants).
  * Introduce settles at centre on frame 92; card exit overlaps that fly-in.
  * Downstream absolute beats are shifted earlier by the same delta (19).
  */
@@ -191,7 +193,7 @@ const LOGO_SCALE_START = 3.5;
 const LOGO_SCALE_END = 2;
 
 /**
- * Phase 3 (Scene1Test only): logo slides left and "births" the pipeline
+ * Phase 3 (MainScene only): logo slides left and "births" the pipeline
  * label from its right edge via an overflow mask. The logo+label row is
  * always `translate(-50%)`-centred, so as the mask grows the whole group
  * rebalances around the frame centre automatically.
@@ -413,7 +415,7 @@ const N8nLogoPipeline: React.FC = () => {
 };
 
 /**
- * Beat 4 (Scene1Test only): everything above clears out to make room for
+ * Beat 4 (MainScene only): everything above clears out to make room for
  * the "Execute workflow" button + cursor-click beat.
  */
 /** Clear-out starts here (absolute) — short admire hold after pipeline. */
@@ -463,7 +465,7 @@ const MANUAL_NODE_WIDTH = 140;
 const MANUAL_NODE_HEIGHT = 120;
 
 /**
- * Beat 5 (Scene1Test only): two timed phases —
+ * Beat 5 (MainScene only): two timed phases —
  * 1) REFLOW_START — Manual Trigger slides left to make room.
  * 2) ARROW_START (later) — arrow draws in left → right, traveling light
  *    pulse, and Google Sheets carousel fade-in + spin.
@@ -704,7 +706,9 @@ const geminiThinkCycleStart = (cycleIndex: number) => {
   return cycleIndex * GEMINI_THINK_INTERVAL;
 };
 
-/** Bounce + full turn used by the idle Gemini (frames 732–1067 recipe). */
+/** Bounce + full turn used by the idle Gemini (frames 732–1067 recipe).
+ *  Scale jumps between two clear sizes while each turn spins — not a soft
+ *  ease curve, just big ↔ small. */
 const geminiThinkMotion = (thinkLocal: number) => {
   let thinkBounce = 1;
   let thinkSpin = 0;
@@ -735,12 +739,15 @@ const geminiThinkMotion = (thinkLocal: number) => {
     };
   }
 
-  const bouncePeak = Math.max(4, Math.round(cycleDur * 0.27));
-  const bounceDip = Math.max(bouncePeak + 2, Math.round(cycleDur * 0.53));
+  // Two plateaus only: big for the first half-turn, small for the second.
+  const BIG = 1.18;
+  const SMALL = 0.88;
+  const half = Math.round(cycleDur / 2);
+  const snap = Math.max(3, Math.round(cycleDur * 0.1));
   thinkBounce = interpolate(
     inCycle,
-    [0, bouncePeak, bounceDip, cycleDur],
-    [1, 1.14, 0.96, 1],
+    [0, snap, half - snap, half + snap, cycleDur - snap, cycleDur],
+    [BIG, BIG, SMALL, SMALL, BIG, BIG],
     { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
   );
   thinkSpin =
@@ -752,8 +759,8 @@ const geminiThinkMotion = (thinkLocal: number) => {
     });
   thinkBloomPulse = interpolate(
     inCycle,
-    [0, bouncePeak, cycleDur],
-    [0.35, 1, 0.45],
+    [0, snap, half - snap, half + snap, cycleDur],
+    [1, 1, 0.4, 0.4, 1],
     { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
   );
   return { thinkBounce, thinkSpin, thinkBloomPulse };
@@ -2538,6 +2545,8 @@ const CodeFramePanel: React.FC<{
   skipMorph?: boolean;
   exitStart?: number;
   exitDuration?: number;
+  /** Grow toward camera while fading (1 = no scale change). */
+  exitScaleTo?: number;
   anchorX?: number;
 }> = ({
   popStart,
@@ -2551,6 +2560,7 @@ const CodeFramePanel: React.FC<{
   skipMorph = false,
   exitStart,
   exitDuration = 14,
+  exitScaleTo = 1,
   anchorX,
 }) => {
   const absFrame = useCurrentFrame();
@@ -2572,6 +2582,18 @@ const CodeFramePanel: React.FC<{
         [exitStart, exitStart + exitDuration],
         [1, 0],
         { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
+      )
+    : 1;
+  const exitScale = exitStart
+    ? interpolate(
+        absFrame,
+        [exitStart, exitStart + exitDuration],
+        [1, exitScaleTo],
+        {
+          easing: Easing.bezier(0.16, 1, 0.3, 1),
+          extrapolateLeft: "clamp",
+          extrapolateRight: "clamp",
+        },
       )
     : 1;
 
@@ -2666,7 +2688,7 @@ const CodeFramePanel: React.FC<{
           top: cy + offsetY,
           width: CODE_FRAME_WIDTH,
           height: CODE_FRAME_HEIGHT,
-          transform: `translate(-50%, -50%) scale(${popScale * morphScale})`,
+          transform: `translate(-50%, -50%) scale(${popScale * morphScale * exitScale})`,
           opacity: enterOpacity * morphOpacity * exitOpacity,
           borderRadius: 16,
           backgroundColor: "#12141c",
@@ -5580,8 +5602,9 @@ const GomBienTheFrame: React.FC = () => {
       skipMorph
       zIndex={2}
       anchorX={anchorX}
-      exitStart={TG_FADE_START}
-      exitDuration={TG_FADE_DURATION}
+      exitStart={TG_CODE_FADE_START}
+      exitDuration={TG_CODE_FADE_DURATION}
+      exitScaleTo={TG_FADE_SCALE_TO}
     />
   );
 };
@@ -5593,7 +5616,7 @@ const GomBienTheFrame: React.FC = () => {
  * Each beat is gated by AbsoluteSequence so Remotion unmounts it outside
  * its visible window (keeps Studio preview light). Frame math stays absolute.
  */
-export const Scene1Test: React.FC = () => {
+export const MainScene: React.FC = () => {
   const frame = useCurrentFrame();
   const sceneEnd = VIDEO.durationInFrames;
   const introClearEnd = EXIT_START + EXIT_DURATION;
@@ -5848,7 +5871,7 @@ export const Scene1Test: React.FC = () => {
 
       <AbsoluteSequence
         from={GOM_FRAME_POP_START}
-        durationInFrames={TG_FADE_START + TG_FADE_DURATION - GOM_FRAME_POP_START + 1}
+        durationInFrames={TG_CODE_FADE_START + TG_CODE_FADE_DURATION - GOM_FRAME_POP_START + 1}
       >
         <GomBienTheFrame />
       </AbsoluteSequence>
@@ -5856,7 +5879,7 @@ export const Scene1Test: React.FC = () => {
       {/* Scene: TelegramPhoneReveal — undo cue: "undo TelegramPhoneReveal" */}
       <AbsoluteSequence
         from={TG_ARROW_START}
-        durationInFrames={TG_FADE_START + TG_FADE_DURATION - TG_ARROW_START + 1}
+        durationInFrames={TG_SIDE_FADE_END - TG_ARROW_START + 1}
       >
         <TelegramOutboundArrow
           leftNodeSize={CODE_FRAME_WIDTH}
@@ -5866,7 +5889,7 @@ export const Scene1Test: React.FC = () => {
 
       <AbsoluteSequence
         from={TG_NODE_POP_START}
-        durationInFrames={TG_FADE_START + TG_FADE_DURATION - TG_NODE_POP_START + 1}
+        durationInFrames={TG_SIDE_FADE_END - TG_NODE_POP_START + 1}
       >
         <TelegramNode />
       </AbsoluteSequence>

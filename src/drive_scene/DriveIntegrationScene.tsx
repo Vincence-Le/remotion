@@ -16,7 +16,7 @@ import DriveScene from "./DriveScene.jsx";
  * 1. FLY+ZOOM  banks in from the left, untilting and growing in one motion
  *              to ~80% of the frame (never full-bleed).
  * 2. DOCK      the still arcs into the grid slot (match cut to thumbnail).
- * 3. MORPH     the whole window shrinks into a left-side Drive node seat.
+ * 3. MORPH     spring pop then shrink; Sample 6 stays glued to the preview seat.
  *
  * DriveScene always renders at full composition size and is only ever scaled
  * down (never up), so its type stays sharp at every step.
@@ -41,7 +41,7 @@ const LAND_LOCAL = THROW_START + THROW_DUR; // 42 ≈ FLY_DUR
 /** Frame the still finishes docking into the grid. */
 export const DRIVE_FILE_MORPH = DRIVE_START + LAND_LOCAL;
 
-/** Hold admiring the docked Drive UI, then suck it into a workflow node. */
+/** Hold admiring the docked Drive UI, then spring-pop it into a workflow node. */
 export const DRIVE_HOLD = 18;
 export const DRIVE_MORPH_START = DRIVE_FILE_MORPH + DRIVE_HOLD;
 export const DRIVE_MORPH_DURATION = 26;
@@ -234,20 +234,27 @@ export const DriveIntegrationScene: React.FC = () => {
   const settledShadow = interpolate(fly, [0, 1], [0.35, 0.42]);
   const flyBlur = (1 - fly) * 3.5;
 
-  // --- Beat 3: suck the window into the left Drive-node seat ---
+  // --- Beat 3: spring pop out, then shrink into the left Drive-node seat ---
   const morphLocal = absFrame - DRIVE_MORPH_START;
   const morph = interpolate(morphLocal, [0, DRIVE_MORPH_DURATION], [0, 1], {
-    easing: EASE_OUT_EXPO,
+    easing: Easing.bezier(0.33, 0.1, 0.2, 1),
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
   const nodeX = width * DRIVE_NODE_X_RATIO;
   const nodeY = height / 2;
   const nodeScale = DRIVE_NODE_SIZE / width;
+  // Pop up like a spring, then collapse into the node (not a straight suck-in).
   const scale = interpolate(
     morph,
-    [0, 0.28, 1],
-    [settledScale, settledScale * 1.05, nodeScale],
+    [0, 0.14, 0.28, 0.55, 1],
+    [
+      settledScale,
+      settledScale * 1.32,
+      settledScale * 1.14,
+      settledScale * 0.42,
+      nodeScale,
+    ],
     { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
   );
   const cardX = interpolate(morph, [0, 1], [settledX, nodeX], {
@@ -318,23 +325,17 @@ export const DriveIntegrationScene: React.FC = () => {
 
   const stillRadius = `${interpolate(pose.t, [0, 1], [SAMPLE_IMAGE_RADIUS, 11])}px ${interpolate(pose.t, [0, 1], [SAMPLE_IMAGE_RADIUS, 11])}px ${interpolate(pose.t, [0, 1], [SAMPLE_IMAGE_RADIUS, 0])}px ${interpolate(pose.t, [0, 1], [SAMPLE_IMAGE_RADIUS, 0])}px`;
 
-  // During morph, the docked still rides the window into the node seat.
-  const stillMorphX = interpolate(morph, [0, 1], [pose.x, nodeX], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
-  const stillMorphY = interpolate(morph, [0, 1], [pose.y, nodeY], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
-  const stillMorphW = interpolate(morph, [0, 1], [pose.w, DRIVE_NODE_SIZE * 0.55], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
-  const stillMorphH = interpolate(morph, [0, 1], [pose.h, DRIVE_NODE_SIZE * 0.55], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
+  // Once morph starts, Sample 6 is glued to the Drive preview seat so it
+  // inherits the same spring-pop + shrink as the window (not a separate lerp).
+  const gluedToCard = morphLocal >= 0;
+  const stillX = gluedToCard
+    ? cardX - cardW / 2 + (PREVIEW_LEFT + PREVIEW_W / 2) * scale
+    : pose.x;
+  const stillY = gluedToCard
+    ? cardY - cardH / 2 + (PREVIEW_TOP + PREVIEW_H / 2) * scale
+    : pose.y;
+  const stillW = gluedToCard ? PREVIEW_W * scale : pose.w;
+  const stillH = gluedToCard ? PREVIEW_H * scale : pose.h;
 
   if (uiOpacity <= 0.001) {
     return null;
@@ -399,17 +400,19 @@ export const DriveIntegrationScene: React.FC = () => {
         </div>
       </div>
 
-      {/* The still — docks as thumbnail, then rides the morph into the node */}
+      {/* The still — docks as thumbnail, then sticks to the Drive card through morph */}
       <div
         style={{
           position: "absolute",
-          left: stillMorphX - stillMorphW / 2,
-          top: stillMorphY - stillMorphH / 2 + stillRise * (1 - morph),
-          width: stillMorphW,
-          height: stillMorphH,
+          left: stillX - stillW / 2,
+          top: stillY - stillH / 2 + (gluedToCard ? 0 : stillRise),
+          width: stillW,
+          height: stillH,
           borderRadius: stillRadius,
           overflow: "hidden",
-          transform: `perspective(1600px) rotateX(${stillTilt * (1 - morph)}deg) scale(${squashX}, ${squashY})`,
+          transform: gluedToCard
+            ? undefined
+            : `perspective(1600px) rotateX(${stillTilt}deg) scale(${squashX}, ${squashY})`,
           transformOrigin: "center bottom",
           filter: throwBlur > 0.2 ? `blur(${throwBlur}px)` : undefined,
           boxShadow: stillShadow,

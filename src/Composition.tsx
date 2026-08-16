@@ -2,11 +2,11 @@ import React from "react";
 import { Sequence } from "remotion";
 import { AuroraBackground } from "./components/AuroraBackground";
 import { SCENES, VIDEO } from "./constants";
-import { Scene1Test } from "./scenes";
+import { MainScene } from "./scenes";
 
 /**
  * Main composition: one "Main" beat that spans the whole video.
- * Scene1Test carries every beat over one shared aurora backdrop.
+ * MainScene carries every beat over one shared aurora backdrop.
  *
  * Project uses layout="none" so Remotion does not inject an AbsoluteFill
  * under it — keeps the Studio timeline labeled only with Sequence names.
@@ -33,7 +33,7 @@ export const PortfolioVideo: React.FC = () => {
           durationInFrames={SCENES.intro.durationInFrames}
           name="Scene"
         >
-          <Scene1Test />
+          <MainScene />
         </Sequence>
       </Sequence>
     </Sequence>

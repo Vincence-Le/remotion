@@ -13,7 +13,7 @@ export const SCENES = {
 } as const;
 
 /**
- * Shared Introduce timing (legacy Scene1 values). Scene1Test overrides
+ * Shared Introduce timing (legacy Scene1 values). MainScene overrides
  * HOOK_CARD / INTRODUCE_START locally for beat-sync.
  */
 export const HOOK_CARD_EXIT_START = 82;
